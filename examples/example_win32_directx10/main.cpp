@@ -55,39 +55,41 @@ void RenderFormattedText(const std::string& html);
 HTMLTag ParseHTMLTag(const std::string& tag);
 bool InitializeFonts();
 
-// Font initialization
+// font initialization with more elegant fonts
 bool InitializeFonts() {
     ImGuiIO& io = ImGui::GetIO();
 
-    // Load default font as regular
-    g_Fonts.regular = io.Fonts->AddFontDefault();
-    if (!g_Fonts.regular)
-        return false;
-
-    // Create bold font with custom configuration
+    // Configure font settings for better rendering
     ImFontConfig config;
-    config.GlyphExtraSpacing.x = 1.0f;
-    config.FontDataOwnedByAtlas = false;
+    config.OversampleH = 4;
+    config.OversampleV = 4;
+    config.PixelSnapH = false;
+    config.RasterizerMultiply = 1.2f;
 
     static const ImWchar ranges[] = {
         0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0x2018, 0x201F, // Curly quotes
+        0x2013, 0x2014, // En and Em dashes
         0,
     };
 
-    // Use the default font with modified weight for bold
-    float defaultFontSize = 13.0f;  // Default ImGui font size
-    g_Fonts.bold = io.Fonts->AddFontDefault(&config);
+    // Load regular font
+    g_Fonts.regular = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 16.0f, &config, ranges);
+    if (!g_Fonts.regular) g_Fonts.regular = io.Fonts->AddFontDefault();
 
-    // Create a slightly larger regular font for headings
-    config.FontDataOwnedByAtlas = false;
-    g_Fonts.italic = io.Fonts->AddFontDefault(&config);
+    // Load bold font
+    config.MergeMode = true;
+    g_Fonts.bold = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consolab.ttf", 16.0f, &config, ranges);
+    if (!g_Fonts.bold) g_Fonts.bold = g_Fonts.regular;
 
-    // Build the font atlas
+    // Load italic font
+    g_Fonts.italic = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consolai.ttf", 16.0f, &config, ranges);
+    if (!g_Fonts.italic) g_Fonts.italic = g_Fonts.regular;
+
+    // Build font atlas
     io.Fonts->Build();
-
     return true;
 }
-
 // Main code
 int main(int, char**)
 {
@@ -344,89 +346,151 @@ void SaveTextToFile(const std::string& text, const std::string& filename)
     file << text;
 }
 
-void RenderFormattedText(const std::string& html)
-{
+// Function to process the list items
+void RenderListItem(const std::string& text, bool ordered, int& order_number) {
+    ImGui::Indent(20);
+    if (ordered) {
+        ImGui::Text("%d. ", order_number++);
+        ImGui::SameLine(0, 0);
+    }
+    else {
+        ImGui::BulletText("%s", text.c_str());
+    }
+    ImGui::TextWrapped("%s", text.c_str());
+    ImGui::Unindent(20);
+}
+
+// Updated rendering function with better styling
+void RenderFormattedText(const std::string& html) {
+    // Set up preview styling with dark background and white text
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.12f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+
+    // Improved padding and spacing
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 24.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(6.0f, 6.0f));
+
     std::string::size_type pos = 0;
     std::string::size_type last_pos = 0;
     std::vector<HTMLTag> tag_stack;
+    bool in_ordered_list = false;
+    int list_number = 1;
 
-    while ((pos = html.find('<', last_pos)) != std::string::npos)
-    {
-        // Render text before the tag
-        if (pos > last_pos)
-        {
+    // Fixed heading sizes (instead of scaling)
+    const float heading_sizes[] = {
+        32.0f,  // h1
+        28.0f,  // h2
+        24.0f,  // h3
+        20.0f,  // h4
+        18.0f,  // h5
+        16.0f   // h6
+    };
+
+    while ((pos = html.find('<', last_pos)) != std::string::npos) {
+        if (pos > last_pos) {
             std::string text = html.substr(last_pos, pos - last_pos);
+            if (!text.empty() && text != "\n") {
+                ImVec4 text_color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+                bool is_bold = false;
+                bool is_italic = false;
+                bool is_heading = false;
+                int heading_level = 0;
 
-            // Apply current formatting based on tag stack
-            bool is_bold = false;
-            bool is_italic = false;
-            bool is_heading = false;
-            float heading_scale = 1.0f;
-
-            for (const auto& tag : tag_stack)
-            {
-                if (tag.tag == "strong" || tag.tag == "b") is_bold = true;
-                if (tag.tag == "em" || tag.tag == "i") is_italic = true;
-                if (tag.tag[0] == 'h' && tag.tag.length() == 2)
-                {
-                    is_heading = true;
-                    heading_scale = 3.0f - (tag.tag[1] - '1') * 0.4f;
+                // Process tag stack for styling
+                for (const auto& tag : tag_stack) {
+                    if (tag.tag == "strong" || tag.tag == "b") is_bold = true;
+                    if (tag.tag == "em" || tag.tag == "i") is_italic = true;
+                    if (tag.tag[0] == 'h' && tag.tag.length() == 2) {
+                        is_heading = true;
+                        heading_level = tag.tag[1] - '0';
+                        text_color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    }
                 }
+
+                // Apply appropriate font
+                ImFont* current_font = g_Fonts.regular;
+                if (is_bold && is_italic) current_font = g_Fonts.boldItalic;
+                else if (is_bold) current_font = g_Fonts.bold;
+                else if (is_italic) current_font = g_Fonts.italic;
+
+                ImGui::PushFont(current_font);
+
+                // Handle headings with fixed sizes and proper spacing
+                if (is_heading && heading_level > 0 && heading_level <= 6) {
+                    // Add spacing before heading
+                    ImGui::Dummy(ImVec2(0.0f, heading_level == 1 ? 32.0f : 24.0f));
+
+                    // Use fixed font size instead of scaling
+                    float font_size = heading_sizes[heading_level - 1];
+                    ImGui::SetWindowFontScale(font_size / 16.0f); // Assuming base font size is 16
+
+                    ImGui::PushStyleColor(ImGuiCol_Text, text_color);
+                    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
+                    ImGui::TextUnformatted(text.c_str());
+                    ImGui::PopTextWrapPos();
+                    ImGui::PopStyleColor();
+
+                    // Reset font scale
+                    ImGui::SetWindowFontScale(1.0f);
+
+                    // Add spacing after heading
+                    ImGui::Dummy(ImVec2(0.0f, heading_level == 1 ? 24.0f : 16.0f));
+                }
+                // Handle regular text and lists
+                else {
+                    if (in_ordered_list) {
+                        ImGui::Indent(24.0f);
+                        ImGui::Text("%d.", list_number++);
+                        ImGui::SameLine(0, 8.0f);
+                    }
+
+                    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
+                    ImGui::TextUnformatted(text.c_str());
+                    ImGui::PopTextWrapPos();
+
+                    if (in_ordered_list) {
+                        ImGui::Unindent(24.0f);
+                    }
+                }
+
+                ImGui::PopFont();
             }
-
-            // Set font based on formatting
-            if (is_bold)
-                ImGui::PushFont(g_Fonts.bold);
-            else if (is_italic)
-                ImGui::PushFont(g_Fonts.italic);
-            else
-                ImGui::PushFont(g_Fonts.regular);
-
-            if (is_heading)
-            {
-                ImGui::SetWindowFontScale(heading_scale);
-            }
-
-            // Render the text
-            ImGui::TextWrapped("%s", text.c_str());
-
-            // Reset formatting
-            ImGui::PopFont();
-            if (is_heading) ImGui::SetWindowFontScale(1.0f);
         }
 
-        // Find the end of the tag
+        // Process tags
         std::string::size_type end_pos = html.find('>', pos);
         if (end_pos == std::string::npos) break;
 
-        // Parse the tag
-        std::string tag_str = html.substr(pos + 1, end_pos - pos - 1);
-        HTMLTag tag = ParseHTMLTag(tag_str);
+        HTMLTag tag = ParseHTMLTag(html.substr(pos + 1, end_pos - pos - 1));
 
-        if (tag.isClosing)
-        {
-            // Pop matching tag from stack
-            if (!tag_stack.empty() && tag_stack.back().tag == tag.tag)
-            {
+        // Handle ordered lists
+        if (tag.tag == "ol") {
+            if (!tag.isClosing) {
+                in_ordered_list = true;
+                list_number = 1;
+            }
+            else {
+                in_ordered_list = false;
+            }
+        }
+
+        // Update tag stack
+        if (tag.isClosing) {
+            if (!tag_stack.empty() && tag_stack.back().tag == tag.tag) {
                 tag_stack.pop_back();
             }
         }
-        else
-        {
-            // Push tag to stack
+        else {
             tag_stack.push_back(tag);
         }
 
         last_pos = end_pos + 1;
     }
 
-    // Render any remaining text
-    if (last_pos < html.length())
-    {
-        ImGui::PushFont(g_Fonts.regular);
-        ImGui::TextWrapped("%s", html.substr(last_pos).c_str());
-        ImGui::PopFont();
-    }
+    // Pop all style modifications
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
 }
 
 HTMLTag ParseHTMLTag(const std::string& tag)
@@ -475,6 +539,10 @@ HTMLTag ParseHTMLTag(const std::string& tag)
     return result;
 }
 
+// Win32 message handler
+// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+// - When io.WantCaptureKeyboard is true, do not dispatch
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
