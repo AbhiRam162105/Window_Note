@@ -361,6 +361,7 @@ void RenderListItem(const std::string& text, bool ordered, int& order_number) {
 }
 
 // Updated rendering function with better styling
+// Updated rendering function with better styling
 void RenderFormattedText(const std::string& html) {
     // Set up preview styling with dark background and white text
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.12f, 1.0f));
@@ -375,12 +376,13 @@ void RenderFormattedText(const std::string& html) {
     std::string::size_type last_pos = 0;
     std::vector<HTMLTag> tag_stack;
     bool in_ordered_list = false;
+    bool in_code_block = false;
     int list_number = 1;
 
     // Fixed heading sizes (instead of scaling)
     const float heading_sizes[] = {
-        32.0f,  // h1
-        28.0f,  // h2
+        42.0f,  // h1
+        32.0f,  // h2
         24.0f,  // h3
         20.0f,  // h4
         18.0f,  // h5
@@ -406,6 +408,7 @@ void RenderFormattedText(const std::string& html) {
                         heading_level = tag.tag[1] - '0';
                         text_color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
                     }
+                    if (tag.tag == "code") in_code_block = true;
                 }
 
                 // Apply appropriate font
@@ -416,8 +419,16 @@ void RenderFormattedText(const std::string& html) {
 
                 ImGui::PushFont(current_font);
 
+                // Handle code block with different background color
+                if (in_code_block) {
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+                    ImGui::BeginChild("CodeBlock", ImVec2(0, 0), true, ImGuiWindowFlags_NoScrollbar);
+                    ImGui::TextUnformatted(text.c_str());
+                    ImGui::EndChild();
+                    ImGui::PopStyleColor();
+                }
                 // Handle headings with fixed sizes and proper spacing
-                if (is_heading && heading_level > 0 && heading_level <= 6) {
+                else if (is_heading && heading_level > 0 && heading_level <= 6) {
                     // Add spacing before heading
                     ImGui::Dummy(ImVec2(0.0f, heading_level == 1 ? 32.0f : 24.0f));
 
@@ -473,6 +484,11 @@ void RenderFormattedText(const std::string& html) {
             else {
                 in_ordered_list = false;
             }
+        }
+
+        // Handle code blocks
+        if (tag.tag == "code") {
+            in_code_block = !tag.isClosing;
         }
 
         // Update tag stack
