@@ -24,6 +24,12 @@
     <ClInclude Include="..\..\backends\imgui_impl_win32.h">
       <Filter>sources</Filter>
     </ClInclude>
+    <ClInclude Include="md4c-html.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="entity.h">
+      <Filter>sources</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\imgui.cpp">
@@ -50,9 +56,20 @@
     <ClCompile Include="..\..\imgui_widgets.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
+    <ClCompile Include="md4c.h">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="md4c.c">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="md4c-html.c">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="entity.c">
+      <Filter>sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\README.txt" />
     <None Include="..\..\misc\debuggers\imgui.natvis">
       <Filter>imgui</Filter>
     </None>

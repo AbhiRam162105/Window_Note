@@ -14,9 +14,12 @@
 #include <tchar.h>
 #include <string>
 #include <vector>
+#include <map>
 #include <commdlg.h>
 #include <fstream>
 #include <sstream>
+#include "md4c.h"
+#include "md4c-html.h"
 
 // Data
 static ID3D10Device* g_pd3dDevice = nullptr;
@@ -24,6 +27,21 @@ static IDXGISwapChain* g_pSwapChain = nullptr;
 static bool g_SwapChainOccluded = false;
 static UINT g_ResizeWidth = 0, g_ResizeHeight = 0;
 static ID3D10RenderTargetView* g_mainRenderTargetView = nullptr;
+
+// Font data
+struct FontData {
+    ImFont* regular;
+    ImFont* bold;
+    ImFont* italic;
+    ImFont* boldItalic;
+} g_Fonts;
+
+// HTML parsing helper struct
+struct HTMLTag {
+    std::string tag;
+    bool isClosing;
+    std::map<std::string, std::string> attributes;
+};
 
 // Forward declarations of helper functions
 bool CreateDeviceD3D(HWND hWnd);
@@ -33,15 +51,51 @@ void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 std::string OpenFileDialog();
 void SaveTextToFile(const std::string& text, const std::string& filename);
+void RenderFormattedText(const std::string& html);
+HTMLTag ParseHTMLTag(const std::string& tag);
+bool InitializeFonts();
+
+// Font initialization
+bool InitializeFonts() {
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Load default font as regular
+    g_Fonts.regular = io.Fonts->AddFontDefault();
+    if (!g_Fonts.regular)
+        return false;
+
+    // Create bold font with custom configuration
+    ImFontConfig config;
+    config.GlyphExtraSpacing.x = 1.0f;
+    config.FontDataOwnedByAtlas = false;
+
+    static const ImWchar ranges[] = {
+        0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0,
+    };
+
+    // Use the default font with modified weight for bold
+    float defaultFontSize = 13.0f;  // Default ImGui font size
+    g_Fonts.bold = io.Fonts->AddFontDefault(&config);
+
+    // Create a slightly larger regular font for headings
+    config.FontDataOwnedByAtlas = false;
+    g_Fonts.italic = io.Fonts->AddFontDefault(&config);
+
+    // Build the font atlas
+    io.Fonts->Build();
+
+    return true;
+}
 
 // Main code
 int main(int, char**)
 {
     // Create application window
-    //ImGui_ImplWin32_EnableDpiAwareness();
+   //ImGui_ImplWin32_EnableDpiAwareness();
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui DirectX10 Example", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Snap_Note", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))
@@ -59,12 +113,20 @@ int main(int, char**)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+    // Initialize fonts
+    if (!InitializeFonts())
+    {
+        // Handle font initialization failure
+        CleanupDeviceD3D();
+        ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        return 1;
+    }
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(hwnd);
@@ -74,10 +136,11 @@ int main(int, char**)
     bool show_demo_window = false;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    std::vector<char> text_buffer(1024); // Initialize with a size of 1024, adjust as needed
+    std::vector<char> text_buffer(2048);
 
     // Main loop
     bool done = false;
+
     while (!done)
     {
         // Poll and handle messages (inputs, window resize, etc.)
@@ -114,7 +177,7 @@ int main(int, char**)
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        // Create a menu bar
+        // Create the main window layout
         if (ImGui::BeginMainMenuBar())
         {
             if (ImGui::BeginMenu("File"))
@@ -125,7 +188,7 @@ int main(int, char**)
                     if (!file_content.empty())
                     {
                         text_buffer.assign(file_content.begin(), file_content.end());
-                        text_buffer.push_back('\0'); // Ensure null-terminated string
+                        text_buffer.push_back('\0');
                     }
                 }
                 if (ImGui::MenuItem("Save"))
@@ -137,20 +200,39 @@ int main(int, char**)
             ImGui::EndMainMenuBar();
         }
 
-        // Set the next window position and size to cover the entire main window
-        ImGui::SetNextWindowPos(ImVec2(0, 20)); // Adjust the position to account for the menu bar height
+        // Set window properties
+        ImGui::SetNextWindowPos(ImVec2(0, 20));
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
 
-        // Show the Notepad window
+        // Main editor window
         {
-            ImGui::Begin("Notepad", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+            ImGui::Begin("Markdown Editor", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
-            // Get the available space within the window
             ImVec2 available_size = ImGui::GetContentRegionAvail();
+            ImGui::Columns(2, nullptr, true);
 
-            // In the main loop
-            ImGui::InputTextMultiline("##source", text_buffer.data(), text_buffer.size(), available_size, ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_NoHorizontalScroll);
+            // Editor pane
+            ImGui::InputTextMultiline("##source", text_buffer.data(), text_buffer.size(),
+                ImVec2(available_size.x * 0.5f, available_size.y),
+                ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_NoHorizontalScroll);
 
+            // Preview pane
+            ImGui::NextColumn();
+            ImGui::BeginChild("Preview", ImVec2(0, 0), true);
+
+            // Convert markdown to HTML and render
+            std::string markdown_text = text_buffer.data();
+            std::string html_output;
+            md_html(markdown_text.c_str(), markdown_text.size(),
+                [](const MD_CHAR* text, MD_SIZE size, void* userdata) {
+                    std::string* output = static_cast<std::string*>(userdata);
+                    output->append(text, size);
+                },
+                &html_output, MD_DIALECT_GITHUB, MD_HTML_FLAG_DEBUG);
+
+            RenderFormattedText(html_output);
+
+            ImGui::EndChild();
             ImGui::End();
         }
 
@@ -161,9 +243,7 @@ int main(int, char**)
         g_pd3dDevice->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
         ImGui_ImplDX10_RenderDrawData(ImGui::GetDrawData());
 
-        // Present
-        HRESULT hr = g_pSwapChain->Present(1, 0);   // Present with vsync
-        g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
+        g_pSwapChain->Present(1, 0);
     }
 
     // Cleanup
@@ -262,6 +342,137 @@ void SaveTextToFile(const std::string& text, const std::string& filename)
 {
     std::ofstream file(filename);
     file << text;
+}
+
+void RenderFormattedText(const std::string& html)
+{
+    std::string::size_type pos = 0;
+    std::string::size_type last_pos = 0;
+    std::vector<HTMLTag> tag_stack;
+
+    while ((pos = html.find('<', last_pos)) != std::string::npos)
+    {
+        // Render text before the tag
+        if (pos > last_pos)
+        {
+            std::string text = html.substr(last_pos, pos - last_pos);
+
+            // Apply current formatting based on tag stack
+            bool is_bold = false;
+            bool is_italic = false;
+            bool is_heading = false;
+            float heading_scale = 1.0f;
+
+            for (const auto& tag : tag_stack)
+            {
+                if (tag.tag == "strong" || tag.tag == "b") is_bold = true;
+                if (tag.tag == "em" || tag.tag == "i") is_italic = true;
+                if (tag.tag[0] == 'h' && tag.tag.length() == 2)
+                {
+                    is_heading = true;
+                    heading_scale = 3.0f - (tag.tag[1] - '1') * 0.4f;
+                }
+            }
+
+            // Set font based on formatting
+            if (is_bold)
+                ImGui::PushFont(g_Fonts.bold);
+            else if (is_italic)
+                ImGui::PushFont(g_Fonts.italic);
+            else
+                ImGui::PushFont(g_Fonts.regular);
+
+            if (is_heading)
+            {
+                ImGui::SetWindowFontScale(heading_scale);
+            }
+
+            // Render the text
+            ImGui::TextWrapped("%s", text.c_str());
+
+            // Reset formatting
+            ImGui::PopFont();
+            if (is_heading) ImGui::SetWindowFontScale(1.0f);
+        }
+
+        // Find the end of the tag
+        std::string::size_type end_pos = html.find('>', pos);
+        if (end_pos == std::string::npos) break;
+
+        // Parse the tag
+        std::string tag_str = html.substr(pos + 1, end_pos - pos - 1);
+        HTMLTag tag = ParseHTMLTag(tag_str);
+
+        if (tag.isClosing)
+        {
+            // Pop matching tag from stack
+            if (!tag_stack.empty() && tag_stack.back().tag == tag.tag)
+            {
+                tag_stack.pop_back();
+            }
+        }
+        else
+        {
+            // Push tag to stack
+            tag_stack.push_back(tag);
+        }
+
+        last_pos = end_pos + 1;
+    }
+
+    // Render any remaining text
+    if (last_pos < html.length())
+    {
+        ImGui::PushFont(g_Fonts.regular);
+        ImGui::TextWrapped("%s", html.substr(last_pos).c_str());
+        ImGui::PopFont();
+    }
+}
+
+HTMLTag ParseHTMLTag(const std::string& tag)
+{
+    HTMLTag result;
+    std::string::size_type pos = 0;
+
+    // Check if it's a closing tag
+    if (tag[0] == '/')
+    {
+        result.isClosing = true;
+        pos = 1;
+    }
+    else
+    {
+        result.isClosing = false;
+    }
+
+    // Get tag name
+    std::string::size_type space_pos = tag.find(' ', pos);
+    if (space_pos == std::string::npos)
+    {
+        result.tag = tag.substr(pos);
+    }
+    else
+    {
+        result.tag = tag.substr(pos, space_pos - pos);
+
+        // Parse attributes (simplified)
+        std::string attrs = tag.substr(space_pos + 1);
+        std::string::size_type attr_pos = 0;
+        while ((attr_pos = attrs.find('=', attr_pos)) != std::string::npos)
+        {
+            std::string::size_type name_start = attrs.rfind(' ', attr_pos);
+            std::string name = attrs.substr(name_start + 1, attr_pos - name_start - 1);
+
+            std::string::size_type value_start = attrs.find('"', attr_pos);
+            std::string::size_type value_end = attrs.find('"', value_start + 1);
+            std::string value = attrs.substr(value_start + 1, value_end - value_start - 1);
+
+            result.attributes[name] = value;
+            attr_pos = value_end + 1;
+        }
+    }
+
+    return result;
 }
 
 // Forward declare message handler from imgui_impl_win32.cpp
