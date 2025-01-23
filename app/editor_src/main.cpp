@@ -1,11 +1,3 @@
-// Dear ImGui: standalone example application for DirectX 10
-
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
-// - Introduction, links and more at the top of imgui.cpp
-
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx10.h"
@@ -346,22 +338,7 @@ void SaveTextToFile(const std::string& text, const std::string& filename)
     file << text;
 }
 
-// Function to process the list items
-void RenderListItem(const std::string& text, bool ordered, int& order_number) {
-    ImGui::Indent(20);
-    if (ordered) {
-        ImGui::Text("%d. ", order_number++);
-        ImGui::SameLine(0, 0);
-    }
-    else {
-        ImGui::BulletText("%s", text.c_str());
-    }
-    ImGui::TextWrapped("%s", text.c_str());
-    ImGui::Unindent(20);
-}
 
-// Updated rendering function with better styling
-// Updated rendering function with better styling
 void RenderFormattedText(const std::string& html) {
     // Set up preview styling with dark background and white text
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.12f, 1.0f));
@@ -555,18 +532,10 @@ HTMLTag ParseHTMLTag(const std::string& tag)
     return result;
 }
 
-// Win32 message handler
-// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-// - When io.WantCaptureKeyboard is true, do not dispatch
-// Forward declare message handler from imgui_impl_win32.cpp
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-// Win32 message handler
-// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))

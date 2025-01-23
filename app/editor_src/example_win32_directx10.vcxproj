@@ -165,6 +165,7 @@
     <ClCompile Include="..\..\imgui_widgets.cpp" />
     <ClCompile Include="..\..\backends\imgui_impl_dx10.cpp" />
     <ClCompile Include="..\..\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="api.cpp" />
     <ClCompile Include="entity.c" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="md4c-html.c" />

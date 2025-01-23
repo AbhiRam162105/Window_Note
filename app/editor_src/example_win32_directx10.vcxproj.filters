@@ -10,6 +10,9 @@
     <Filter Include="sources\fonts">
       <UniqueIdentifier>{66d5e88e-0238-4eae-9990-e186443b8bc7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="sources\API">
+      <UniqueIdentifier>{33746f35-02e8-4a18-a022-d8b9f07902e0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\imconfig.h">
@@ -70,6 +73,9 @@
     </ClCompile>
     <ClCompile Include="entity.c">
       <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="api.cpp">
+      <Filter>sources\API</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
